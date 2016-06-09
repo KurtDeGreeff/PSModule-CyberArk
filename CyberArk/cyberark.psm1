@@ -33,7 +33,8 @@ param (
   [string]$Reason,
   [switch]$PlainText
 )
-
+  
+  # build URI, http header, and http body
   $uri = "https://CCP_HOSTNAME_HERE/AIMWebService/V1.1/AIM.asmx?WSDL"
   $header = @{"SOAPAction" = "https://tempuri.org/GetPassword"}
 
@@ -55,14 +56,16 @@ param (
 
   [xml]$xmlRequest = $body
 
+  # make the web call
   try {
     $request = Invoke-WebRequest -Uri $uri -Method Post -Headers $header -Body $xmlRequest -ContentType 'text/xml'
   }
   catch {
     Write-Error "Password retrieval failed for account: $UserName."
-    break
+    return
   }
 
+  # build a PS object with the response
   [xml]$response = $request.Content
 
   $o = New-Object -TypeName PSObject | select UserName,Address,Password
@@ -70,6 +73,7 @@ param (
   $o.Address = $response.Envelope.Body.GetPasswordResponse.GetPasswordResult.Address
   $o.Password = $response.Envelope.Body.GetPasswordResponse.GetPasswordResult.Content
 
+  # output the response as a PS credential or plaintext
   If (!$PlainText) {
     $credential = New-Object System.Management.Automation.PSCredential -ArgumentList @("$Address\$UserName",(ConvertTo-SecureString -String $o.Password -AsPlainText -Force))
     Write $credential

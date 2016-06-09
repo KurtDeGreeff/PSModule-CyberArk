@@ -1,6 +1,6 @@
 @{
 Author = 'AJ Suchocki'
-CompanyName = 'Blue Cross Blue Shield of Arizona'
+CompanyName = 'None'
 Description = 'CyberArk integrations for PowerShell'
 ModuleVersion = '1.0.0'
 PowerShellVersion = '3.0'
