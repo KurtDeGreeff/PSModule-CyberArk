@@ -33,7 +33,7 @@ param (
   [string]$Reason,
   [switch]$PlainText
 )
-  
+
   # build URI, http header, and http body
   $uri = "https://CCP_HOSTNAME_HERE/AIMWebService/V1.1/AIM.asmx?WSDL"
   $header = @{"SOAPAction" = "https://tempuri.org/GetPassword"}
@@ -80,5 +80,87 @@ param (
   } else {
     Write $o
   }
+
+}
+
+function Find-CyberArkAccount {
+  <#
+    .SYNOPSIS
+      Get-PasswordFromCyberArk - Search for an account in CyberArk
+    .DESCRIPTION
+      Use the PVWA REST API to search for an account in a CyberArk safe.
+    .PARAMETER UserName
+      UserName of the account.
+    .PARAMETER Address
+      Address of the account.
+    .PARAMETER Safe
+      Safe where the account is stored.
+    .PARAMETER Credential
+      PSCredential containing the username and password to login to the API
+    .NOTES
+      Command Name   : Find-CyberArkAccount
+      Author         : AJ Suchocki
+    .EXAMPLE
+      PS C:\> Find-CyberArkAccount -UserName administrator -Address server.domain.com -Safe servers -Credential (Get-Credential)
+    .EXAMPLE
+      PS C:\ $cred = Get-PasswordFromCyberArk -UserName api_user -Address server.domain.com -Safe api-accounts -AppID APIAccounts
+      PS C:\> Find-CyberArkAccount -UserName administrator -Address server.domain.com -Safe servers -Credential ($cred)
+  #>
+  # Parameters
+  param (
+    [Parameter(Mandatory=$true)][String]$UserName,
+    [Parameter(Mandatory=$true)][String]$Address,
+    [Parameter(Mandatory=$true)][String]$Safe,
+    [Parameter(Mandatory=$true)][System.Management.Automation.PSCredential]$Credential
+
+  )
+
+  $uri = "https://PVWA_HOSTNAME_HERE/PasswordVault/WebServices"
+  # build authentication header
+  $authHeader = @{username=$Credential.UserName;password=$Credential.GetNetworkCredential().Password} | ConvertTo-Json
+
+  # create search object
+  $o = New-Object -TypeName PSObject | select UserName,Address,Safe,SearchResult
+  $o.UserName = $UserName
+  $o.Address = $Address
+  $o.Safe = $Safe
+
+  # logon to the API service and retunrn the auth token
+  try {
+    $logonResult = Invoke-RestMethod -Method Post -Uri "$uri/auth/CyberArk/CyberArkAuthenticationService.svc/logon" `
+    -ContentType "application/json" -Body $authHeader
+  }
+  catch {
+    $o.SearchResult = "REST Login Failed"
+    write $o
+    return
+  }
+
+  # search for the account
+  try {
+    $queryResult = Invoke-RestMethod -Method Get -Uri "$uri/PIMServices.svc/Accounts?Keywords=$UserName%2C%20$Address&Safe=$Safe" `
+    -ContentType "application/json" -Headers @{ Authorization = $logonResult.CyberArkLogonResult }
+    $resultCount = $queryResult.count
+    $o.SearchResult = "$resultCount account(s) found"
+  }
+  catch {
+    $o.SearchResult = "REST Search Failed"
+    write $o
+    return
+  }
+
+  # logoff from the API service
+  try {
+  $logoffResult = Invoke-RestMethod -Method Post -Uri "$uri/auth/CyberArk/CyberArkAuthenticationService.svc/logoff" `
+  -ContentType "application/json" -Headers @{ Authorization = $logonResult.CyberArkLogonResult }
+  }
+  catch {
+    $o.SearchResult = "REST Logoff Failed"
+    write $o
+    return
+  }
+
+  # write output to the pipeline
+  write $o
 
 }
